@@ -138,7 +138,9 @@ export async function zeroshotFeatures(rows, spec = SMOL135) {
   const cache = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
   const todo = rows.filter((r) => !(r.id in cache));
   if (todo.length) {
-    const m = spec.pair ? await Promise.all(spec.pair.map(loadLM)) : await loadLM(spec);
+    let m;
+    if (spec.pair) { m = []; for (const s of spec.pair) m.push(await loadLM(s)); } // one at a time: ORT mounts external data per session
+    else m = await loadLM(spec);
     const t0 = Date.now();
     for (let i = 0; i < todo.length; i++) {
       cache[todo[i].id] = spec.pair ? await pairFeaturesFor(m, todo[i].text) : await featuresFor(m, todo[i].text);
