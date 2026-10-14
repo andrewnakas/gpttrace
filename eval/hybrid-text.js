@@ -35,6 +35,6 @@ for (const set of sets) {
     id: r.id, set, label: r.label, slice: r.slice || r.source || "", words: (r.text.match(/\S+/g) || []).length,
     ettin: ettin[r.id], ...zs[r.id]
   }));
-  fs.writeFileSync(path.join(OUT, `${set}${LM === SPECS.smol135 ? "" : "-" + LM.name}.jsonl`), lines.join("\n") + "\n");
+  fs.writeFileSync(path.join(OUT, `${set}${LM === SPECS.smol135 ? "" : "-" + (process.env.LM)}.jsonl`), lines.join("\n") + "\n");
   console.log(`  → ${lines.length} rows written`);
 }

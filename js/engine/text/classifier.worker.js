@@ -11,21 +11,23 @@ ort.env.wasm.wasmPaths = new URL("../../../vendor/ort-1.30.0/", import.meta.url)
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
 let state = null;
 
-// One file from the first mirror that has it. A model split into
-// M.parts files (over the host's per-file limit) is fetched part by part and
-// joined; the local dev mirror serves it whole.
-async function get(path, progress, binary) {
+// One file (a key of M.files) from the first mirror that has it. On our own
+// host the model is split into M.parts files (over the per-file limit) that
+// are fetched part by part and joined; the local dev mirror and the Hugging
+// Face mirrors (M.mirrors) serve it whole.
+async function get(key, progress, binary) {
   const cache = typeof caches !== "undefined" ? await caches.open("gpttrace-models-v1") : null;
   let lastErr;
   // On a local dev/test server, try a local mirror first (tools/serve.js and
   // the test harness serve ~/.cache/gpttrace/hf at /__models/).
   const local = /^(localhost|127\.0\.0\.1)$/.test(self.location.hostname) ? [new URL("/__models/" + M.id + "/", self.location.origin).href] : [];
-  for (const base of [...local, ...M.base]) {
-    const url = new URL(base + path, self.location.origin).href;
+  const mirrors = [...local.map((base) => ({ base, files: M.files, whole: true })), ...M.base.map((base) => ({ base, files: M.files })), ...(M.mirrors || []).map((m) => ({ ...m, whole: true }))];
+  for (const m of mirrors) {
+    const url = new URL(m.base + m.files[key], self.location.origin).href;
     try {
       const hit = cache && (await cache.match(url));
       if (hit) return binary ? new Uint8Array(await hit.arrayBuffer()) : hit.json();
-      const parts = binary && M.parts && !local.includes(base) ? Array.from({ length: M.parts }, (_, i) => url + ".part" + i) : [url];
+      const parts = binary && M.parts && !m.whole ? Array.from({ length: M.parts }, (_, i) => url + ".part" + i) : [url];
       const chunks = [];
       let got = 0;
       for (const u of parts) {
@@ -48,9 +50,9 @@ async function get(path, progress, binary) {
 
 async function load(progress) {
   if (state) return state;
-  const [tj, tc] = await Promise.all([get(M.files.tokenizer, () => {}), get(M.files.config, () => {})]);
+  const [tj, tc] = await Promise.all([get("tokenizer", () => {}), get("config", () => {})]);
   const tokenizer = new Tokenizer(tj, tc);
-  const session = await ort.InferenceSession.create(await get(M.files.model, progress, true), { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+  const session = await ort.InferenceSession.create(await get("model", progress, true), { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
   return (state = { tokenizer, session });
 }
 

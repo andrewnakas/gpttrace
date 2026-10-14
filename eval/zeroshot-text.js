@@ -25,7 +25,10 @@ import { normalizeText } from "../js/engine/text/normalize.js";
 
 const HF = path.join(os.homedir(), ".cache", "gpttrace", "hf");
 export const SMOL135 = { name: "zs-smollm2-135m-q8", dir: path.join(HF, "onnx-community/SmolLM2-135M-ONNX"), file: "onnx/model_quantized.onnx", maxTokens: 512 };
-export const SPECS = { smol135: SMOL135 };
+export const SMOL360 = { name: "zs-smollm2-360m-q8", dir: path.join(HF, "onnx-community/SmolLM2-360M-ONNX"), file: "onnx/model_quantized.onnx", maxTokens: 512 };
+// Two-model Binoculars (observer 135M, performer 360M; same tokenizer).
+export const PAIR = { name: "zs-pair-smollm2-135m-360m-q8", pair: [SMOL135, SMOL360], maxTokens: 512 };
+export const SPECS = { smol135: SMOL135, smol360: SMOL360, pair: PAIR };
 
 export async function loadLM(spec) {
   const ort = await import("../vendor/ort-1.30.0/ort.wasm.min.mjs");
@@ -42,13 +45,15 @@ export async function loadLM(spec) {
   return { ort, tokenizer, session, spec, cfg };
 }
 
-export async function featuresFor(m, text) {
-  const { ort, tokenizer, session, spec, cfg } = m;
-  let ids = tokenizer.encode(normalizeText(text)).ids;
-  if (cfg.bos_token_id != null && ids[0] !== cfg.bos_token_id) ids.unshift(cfg.bos_token_id);
-  ids = ids.slice(0, spec.maxTokens);
+function tokens(m, text) {
+  let ids = m.tokenizer.encode(normalizeText(text)).ids;
+  if (m.cfg.bos_token_id != null && ids[0] !== m.cfg.bos_token_id) ids.unshift(m.cfg.bos_token_id);
+  return ids.slice(0, m.spec.maxTokens);
+}
+
+async function logitsFor(m, ids) {
+  const { ort, session, cfg } = m;
   const L = ids.length;
-  if (L < 3) return null;
   const heads = cfg.num_key_value_heads, dim = cfg.head_dim || cfg.hidden_size / cfg.num_attention_heads;
   const feeds = {};
   for (const name of session.inputNames) {
@@ -59,7 +64,25 @@ export async function featuresFor(m, text) {
     else throw new Error("unexpected LM input " + name);
   }
   const out = await session.run(feeds);
-  const logits = out.logits.data, V = out.logits.dims[2];
+  return { logits: out.logits.data, V: out.logits.dims[2] };
+}
+
+// Log-softmax of row t, in place into buf.
+function logSoftmax(logits, off, V, buf) {
+  let max = -Infinity;
+  for (let v = 0; v < V; v++) if (logits[off + v] > max) max = logits[off + v];
+  let z = 0;
+  for (let v = 0; v < V; v++) z += Math.exp(logits[off + v] - max);
+  const lz = Math.log(z) + max;
+  for (let v = 0; v < V; v++) buf[v] = logits[off + v] - lz;
+  return buf;
+}
+
+export async function featuresFor(m, text) {
+  const ids = tokens(m, text);
+  const L = ids.length;
+  if (L < 3) return null;
+  const { logits, V } = await logitsFor(m, ids);
   let sLL = 0, sMean = 0, sVar = 0, sEnt = 0, sRank = 0;
   for (let t = 0; t < L - 1; t++) {
     const off = t * V, next = ids[t + 1];
@@ -83,6 +106,31 @@ export async function featuresFor(m, text) {
   return { ll: r(sLL / n), ent: r(sEnt / n), bino: r(-sLL / sEnt), fdg: r((sLL - sMean) / Math.sqrt(Math.max(sVar, 1e-9))), rank: r(sRank / n), n };
 }
 
+/* Two-model Binoculars (Hans et al. 2024): observer o and performer p share
+ * a tokenizer. llo/llp are each model's mean log-likelihood of the text,
+ * xent the mean cross-entropy of the observer's log-probs under the
+ * performer's distribution, bino = −llo / xent (low means machine-like) and
+ * dll = llp − llo (how much more the bigger model likes the text). */
+export async function pairFeaturesFor([o, p], text) {
+  const ids = tokens(o, text);
+  const L = ids.length;
+  if (L < 3) return null;
+  const a = await logitsFor(o, ids), b = await logitsFor(p, ids);
+  const V = Math.min(a.V, b.V), lo = new Float64Array(V), lp = new Float64Array(V);
+  let sLo = 0, sLp = 0, sX = 0;
+  for (let t = 0; t < L - 1; t++) {
+    logSoftmax(a.logits, t * a.V, V, lo);
+    logSoftmax(b.logits, t * b.V, V, lp);
+    const next = ids[t + 1];
+    sLo += lo[next]; sLp += lp[next];
+    let x = 0;
+    for (let v = 0; v < V; v++) x -= Math.exp(lp[v]) * lo[v];
+    sX += x;
+  }
+  const n = L - 1, r = (x) => +x.toFixed(4);
+  return { llo: r(sLo / n), llp: r(sLp / n), dll: r((sLp - sLo) / n), xent: r(sX / n), bino: r(-sLo / sX), n };
+}
+
 // Returns { [row.id]: features } for every row, scoring only uncached rows.
 export async function zeroshotFeatures(rows, spec = SMOL135) {
   const file = path.join(CACHE, "neural", spec.name + ".json");
@@ -90,10 +138,10 @@ export async function zeroshotFeatures(rows, spec = SMOL135) {
   const cache = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
   const todo = rows.filter((r) => !(r.id in cache));
   if (todo.length) {
-    const m = await loadLM(spec);
+    const m = spec.pair ? await Promise.all(spec.pair.map(loadLM)) : await loadLM(spec);
     const t0 = Date.now();
     for (let i = 0; i < todo.length; i++) {
-      cache[todo[i].id] = await featuresFor(m, todo[i].text);
+      cache[todo[i].id] = spec.pair ? await pairFeaturesFor(m, todo[i].text) : await featuresFor(m, todo[i].text);
       if ((i + 1) % 100 === 0 || i === todo.length - 1) {
         fs.writeFileSync(file, JSON.stringify(cache));
         process.stderr.write(`\r${spec.name}: ${i + 1}/${todo.length} (${((Date.now() - t0) / (i + 1)).toFixed(0)} ms/row)`);

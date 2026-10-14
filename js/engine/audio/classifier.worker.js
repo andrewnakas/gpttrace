@@ -18,12 +18,15 @@ let session = null;
 async function fetchModel(progress) {
   const cache = typeof caches !== "undefined" ? await caches.open("gpttrace-models-v1") : null;
   const local = /^(localhost|127\.0\.0\.1)$/.test(self.location.hostname) ? [new URL("/__models/" + M.id + "/", self.location.origin).href] : [];
-  for (const base of [...local, ...M.base]) {
-    const url = new URL(base + M.files.model, self.location.origin).href;
+  // Our host serves the model in M.parts files; the local dev mirror and the
+  // Hugging Face mirrors (M.mirrors) serve it whole.
+  const mirrors = [...local.map((base) => ({ base, files: M.files, whole: true })), ...M.base.map((base) => ({ base, files: M.files })), ...(M.mirrors || []).map((m) => ({ ...m, whole: true }))];
+  for (const m of mirrors) {
+    const url = new URL(m.base + m.files.model, self.location.origin).href;
     try {
       const hit = cache && (await cache.match(url));
       if (hit) return new Uint8Array(await hit.arrayBuffer());
-      const parts = M.parts && !local.includes(base) ? Array.from({ length: M.parts }, (_, i) => url + ".part" + i) : [url];
+      const parts = M.parts && !m.whole ? Array.from({ length: M.parts }, (_, i) => url + ".part" + i) : [url];
       const chunks = []; let got = 0;
       for (const u of parts) {
         const res = await fetch(u);

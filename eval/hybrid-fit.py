@@ -17,12 +17,12 @@ from sklearn.preprocessing import StandardScaler
 
 D = os.path.expanduser("~/.cache/gpttrace/eval/hybrid")
 SETS = sys.argv[1:] or [f[:-6] for f in sorted(os.listdir(D)) if f.endswith(".jsonl")]
-ZS = ["ll", "ent", "bino", "fdg", "rank"]
+ZS = os.environ.get("ZS", "ll,ent,bino,fdg,rank").split(",")   # pair runs: ZS=llo,llp,dll,xent,bino
 GROUPS = {"ettin": ["ettin"], "zero-shot": ZS, "hybrid": ["ettin"] + ZS}
 
 def load(name):
     rows = [json.loads(l) for l in open(os.path.join(D, name + ".jsonl")) if l.strip()]
-    rows = [r for r in rows if r.get("ettin") is not None and r.get("fdg") is not None]
+    rows = [r for r in rows if r.get("ettin") is not None and r.get(ZS[0]) is not None]
     y = np.array([r["label"] == "ai" for r in rows], int)
     return rows, y
 
@@ -54,15 +54,16 @@ for n, (rows, y) in data.items():
         cells.append(f"AUC {roc_auc_score(y, s):.3f} T@5 {tpr_at(y, s):.3f}")
     print(f"{n:<18}{len(y):>6}  " + "  ".join(f"{c:>22}" for c in cells))
 
-if "inhouse" in data:
-    rows, y = data["inhouse"]
+TRAIN = next((n for n in data if n.startswith("inhouse")), None)
+if TRAIN:
+    rows, y = data[TRAIN]
     print("\ntransfer: fit on inhouse, test unchanged")
     fitted = {g: model().fit(X(rows, cols), y) for g, cols in GROUPS.items()}
     for g, m in fitted.items():
         coef = m[-1].coef_[0]
         print(f"  {g:<10} coef " + ", ".join(f"{c}={w:+.2f}" for c, w in zip(GROUPS[g], coef)))
     for n, (r2, y2) in data.items():
-        if n == "inhouse" or len(set(y2)) < 2: continue
+        if n == TRAIN or len(set(y2)) < 2: continue
         cells = [f"AUC {roc_auc_score(y2, m.decision_function(X(r2, GROUPS[g]))):.3f}" for g, m in fitted.items()]
         print(f"  {n:<16}{len(y2):>6}  " + "  ".join(f"{g}: {c}" for g, c in zip(GROUPS, cells)))
     # Human false positives by slice at the threshold giving 5% FPR in-house.
