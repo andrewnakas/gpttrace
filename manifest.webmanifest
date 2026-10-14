@@ -1,0 +1,33 @@
+{
+  "name": "GPTTrace: Private AI Detector",
+  "short_name": "GPTTrace",
+  "description": "Check text, images, audio and video for signs of AI. Runs on your device.",
+  "id": "/",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "categories": ["utilities", "productivity", "education"],
+  "icons": [
+    { "src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/assets/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "shortcuts": [
+    { "name": "Check text", "url": "/ai-text-detector/" },
+    { "name": "Check an image", "url": "/ai-image-detector/" },
+    { "name": "Check audio", "url": "/ai-audio-detector/" }
+  ],
+  "share_target": {
+    "action": "/share/",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "file", "accept": ["image/*", "audio/*", "video/*"] }]
+    }
+  }
+}

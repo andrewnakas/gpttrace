@@ -1,0 +1,7 @@
+node_modules/
+/extension/dist/
+/extension/dist-*/
+/dist/
+__pycache__/
+.DS_Store
+xcuserdata/

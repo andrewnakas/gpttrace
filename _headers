@@ -1,0 +1,61 @@
+# Cloudflare headers (Pages or Workers static assets use the same file).
+# Docs: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# The CSP is the technical backing for "your file never leaves your device":
+# connect-src allows only this origin (pages, workers, models) and the model
+# mirrors, which are only ever fetched with GET. The free tools never send a
+# request with a body (tests/run.js fails if they do). This origin also serves
+# /api/* (worker.js → api/), which exists only for the Pro waitlist, Pro
+# sign-in and billing, and the opt-in Pro cloud check: a file or text is
+# posted there only when a Pro subscriber switches on "Pro: large cloud model"
+# for that check. /pro/ alone may load Turnstile; worker.js sets that page's
+# CSP (a second /pro/* rule here would be comma-joined, i.e. intersected).
+# 'wasm-unsafe-eval' lets onnxruntime compile its WASM.
+# Third parties allowed: Cloudflare Web Analytics (cookie-free page views,
+# injected by Cloudflare) and Google Analytics 4 (js/ga.js) — script hosts and
+# beacon endpoints only. Neither ever receives analysed files or text.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(self), geolocation=(), interest-cohort=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com https://www.googletagmanager.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.google-analytics.com https://*.googletagmanager.com; media-src 'self' blob:; font-src 'self'; connect-src 'self' blob: data: https://cloudflareinsights.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://models.gpttrace.com https://huggingface.co https://*.huggingface.co https://*.hf.co; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'
+
+/css/*
+  Cache-Control: public, max-age=3600, must-revalidate
+/js/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+# Versioned directories: a new version gets a new path, so these never change.
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+/assets/*
+  Cache-Control: public, max-age=604800
+
+/*.wasm
+  Content-Type: application/wasm
+/*.onnx
+  Content-Type: application/octet-stream
+
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
+/sitemap.xml
+  Content-Type: application/xml
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/eval/*
+  X-Robots-Tag: noindex
+/tests/*
+  X-Robots-Tag: noindex

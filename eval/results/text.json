@@ -1,0 +1,99 @@
+{
+ "date": "2026-10-08",
+ "n": 2467,
+ "nAI": 1258,
+ "nHuman": 1209,
+ "auc": 0.796,
+ "atLikelyAI": {
+  "threshold": 0.7,
+  "tpr": 0.334,
+  "fpr": 0.045,
+  "precision": 0.884,
+  "accuracy": 0.638
+ },
+ "at1pctFpr": {
+  "threshold": 0.864,
+  "tpr": 0.17,
+  "fpr": 0.01,
+  "precision": 0.947,
+  "accuracy": 0.572,
+  "targetFpr": 0.01
+ },
+ "at5pctFpr": {
+  "threshold": 0.688,
+  "tpr": 0.351,
+  "fpr": 0.05,
+  "precision": 0.88,
+  "accuracy": 0.645,
+  "targetFpr": 0.05
+ },
+ "slices": {
+  "ai:claude-opus-5": {
+   "n": 12,
+   "label": "ai",
+   "flaggedAI": 0.5,
+   "meanProb": 0.646
+  },
+  "ai:gpt-4.1": {
+   "n": 12,
+   "label": "ai",
+   "flaggedAI": 1,
+   "meanProb": 0.922
+  },
+  "ai:gpt-oss-120b": {
+   "n": 12,
+   "label": "ai",
+   "flaggedAI": 1,
+   "meanProb": 0.955
+  },
+  "ai:claude-haiku-4-5": {
+   "n": 12,
+   "label": "ai",
+   "flaggedAI": 0.917,
+   "meanProb": 0.893
+  },
+  "ai:qwen-3.8-27b": {
+   "n": 8,
+   "label": "ai",
+   "flaggedAI": 0.75,
+   "meanProb": 0.772
+  },
+  "human:pd-literature": {
+   "n": 306,
+   "label": "human",
+   "flaggedAI": 0.013,
+   "meanProb": 0.124
+  },
+  "human:human-pmc-esl": {
+   "n": 183,
+   "label": "human",
+   "flaggedAI": 0.049,
+   "meanProb": 0.171
+  },
+  "human:human-wikipedia-pre2022": {
+   "n": 155,
+   "label": "human",
+   "flaggedAI": 0.065,
+   "meanProb": 0.241
+  },
+  "human:hc3-open_qa": {
+   "n": 7,
+   "label": "human",
+   "flaggedAI": 0,
+   "meanProb": 0.329
+  },
+  "ai:chatgpt-3.5": {
+   "n": 1202,
+   "label": "ai",
+   "flaggedAI": 0.31,
+   "meanProb": 0.495
+  },
+  "human:hc3-wiki_csai": {
+   "n": 558,
+   "label": "human",
+   "flaggedAI": 0.057,
+   "meanProb": 0.235
+  }
+ },
+ "seconds": 1.3
+}

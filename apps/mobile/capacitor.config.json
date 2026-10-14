@@ -1,0 +1,8 @@
+{
+  "appId": "com.gpttrace.app",
+  "appName": "GPTTrace",
+  "webDir": "../web",
+  "backgroundColor": "#0b0d12",
+  "ios": { "contentInset": "always" },
+  "android": { "allowMixedContent": false }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GPTTrace</string>
+    <string name="title_activity_main">GPTTrace</string>
+    <string name="package_name">com.gpttrace.app</string>
+    <string name="custom_url_scheme">com.gpttrace.app</string>
+</resources>

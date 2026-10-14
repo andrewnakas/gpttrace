@@ -1,0 +1,15 @@
+{
+  "name": "gpttrace",
+  "private": true,
+  "type": "module",
+  "description": "Open AI-content detectors for text, images and audio that run in the browser, with the evaluation and training code behind them.",
+  "license": "MIT",
+  "homepage": "https://gpttrace.com/",
+  "scripts": {
+    "serve": "node tools/serve.js",
+    "eval": "node eval/run.js",
+    "eval:fetch": "node eval/fetch.js",
+    "build:extension": "node tools/build-extension.js && node tools/build-extension.js --target=firefox"
+  },
+  "engines": { "node": ">=22" }
+}

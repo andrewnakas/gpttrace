@@ -1,0 +1,58 @@
+{
+ "date": "2026-10-13",
+ "n": 340,
+ "nAI": 91,
+ "nHuman": 249,
+ "auc": 0.959,
+ "eer": 0.11,
+ "atLikelyAI": {
+  "threshold": 0.7,
+  "tpr": 0.505,
+  "fpr": 0.016,
+  "precision": 0.92,
+  "accuracy": 0.856
+ },
+ "at1pctFpr": {
+  "threshold": 0.814,
+  "tpr": 0.374,
+  "fpr": 0.008,
+  "precision": 0.944,
+  "accuracy": 0.826,
+  "targetFpr": 0.01
+ },
+ "at5pctFpr": {
+  "threshold": 0.344,
+  "tpr": 0.747,
+  "fpr": 0.048,
+  "precision": 0.85,
+  "accuracy": 0.897,
+  "targetFpr": 0.05
+ },
+ "slices": {
+  "human:toefl-nonnative": {
+   "n": 91,
+   "label": "human",
+   "flaggedAI": 0.044,
+   "meanProb": 0.136
+  },
+  "human:us-8th-grade-essays": {
+   "n": 88,
+   "label": "human",
+   "flaggedAI": 0,
+   "meanProb": 0.011
+  },
+  "human:us-college-essays": {
+   "n": 70,
+   "label": "human",
+   "flaggedAI": 0,
+   "meanProb": 0.017
+  },
+  "ai:toefl-gpt4-polished": {
+   "n": 91,
+   "label": "ai",
+   "flaggedAI": 0.505,
+   "meanProb": 0.612
+  }
+ },
+ "seconds": 244.5
+}

@@ -1,0 +1,16 @@
+{
+  "id": "andrewnakas/gpttrace-image-baseline",
+  "title": "gpttrace-image-baseline",
+  "code_file": "image_baseline.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": []
+}

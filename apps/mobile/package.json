@@ -1,0 +1,19 @@
+{
+  "name": "gpttrace-mobile",
+  "private": true,
+  "description": "GPTTrace for iOS and Android: the on-device detectors in a Capacitor shell, with a share target.",
+  "scripts": {
+    "web": "node ../../tools/build-app.js",
+    "sync": "npm run web && npx cap sync",
+    "ios": "npm run sync && npx cap open ios",
+    "android": "npm run sync && npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

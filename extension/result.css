@@ -1,0 +1,32 @@
+/* Result window. Builds on the site's css/styles.css (copied in by
+ * tools/build-extension.js); only the layout of this one page lives here. */
+.site-header .wrap{height:52px;padding:0 16px}
+.site-header .privacy-badge{margin:0;padding:5px 11px;font-size:12px}
+.site-header .brand-name{display:inline}
+.ext-main{display:grid;gap:16px;padding:16px;max-width:1200px}
+.ext-main .result-card{min-height:0}
+.ext-result{min-height:300px!important}
+.ext-result .result-empty{text-align:left;margin:8px 0;color:var(--text-dim)}
+.ext-result .result-empty h2{margin:0 0 10px;font-size:18px;color:var(--text)}
+.ext-result .result-empty .steps{padding-left:20px;margin:0}
+.ext-result .result-empty .steps li{margin:6px 0}
+/* Narrow window: the verdict first, then what was checked. */
+.ext-source{gap:10px;order:2}
+.ext-source .section-title{margin-top:0}
+.ext-source canvas{display:block;max-width:100%;max-height:260px;margin:0 auto;border-radius:var(--radius-sm)}
+.ext-source .src-meta{font-size:12px;color:var(--text-mute);word-break:break-all}
+.ext-source .excerpt{margin:0;font:13px/1.55 var(--serif);color:var(--text-dim);max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.ext-deep{margin-top:14px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--panel-2)}
+.ext-deep p{margin:0 0 10px;font-size:13px;color:var(--text-dim)}
+.ext-deep .toggle{margin-top:10px}
+.ext-full{margin-top:14px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.ext-full .btn{text-decoration:none}
+.ext-full .note{margin:0}
+/* Wide window (or a 1280×800 store screenshot): source on the left. */
+@media (min-width:900px){
+  .ext-main{grid-template-columns:minmax(260px,380px) 1fr;align-items:start}
+  .ext-source{order:0}
+  .ext-main .ext-source[hidden]+.ext-result{grid-column:1/-1}
+  .ext-source canvas{max-height:420px}
+  .ext-source .excerpt{max-height:520px}
+}

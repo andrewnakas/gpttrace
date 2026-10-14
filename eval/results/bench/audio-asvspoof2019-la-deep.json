@@ -1,0 +1,46 @@
+{
+ "date": "2026-10-12",
+ "n": 300,
+ "nAI": 150,
+ "nHuman": 150,
+ "auc": 0.988,
+ "eer": 0.02,
+ "atLikelyAI": {
+  "threshold": 0.7,
+  "tpr": 0.913,
+  "fpr": 0,
+  "precision": 1,
+  "accuracy": 0.957
+ },
+ "at1pctFpr": {
+  "threshold": 0.045,
+  "tpr": 0.967,
+  "fpr": 0.007,
+  "precision": 0.993,
+  "accuracy": 0.98,
+  "targetFpr": 0.01
+ },
+ "at5pctFpr": {
+  "threshold": 0.019,
+  "tpr": 0.98,
+  "fpr": 0.047,
+  "precision": 0.955,
+  "accuracy": 0.967,
+  "targetFpr": 0.05
+ },
+ "slices": {
+  "ai:spoof": {
+   "n": 150,
+   "label": "ai",
+   "flaggedAI": 0.913,
+   "meanProb": 0.873
+  },
+  "human:bonafide": {
+   "n": 150,
+   "label": "human",
+   "flaggedAI": 0,
+   "meanProb": 0.014
+  }
+ },
+ "seconds": 458.6
+}

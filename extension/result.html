@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPTTrace</title>
+<link rel="icon" href="icons/icon-32.png">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="result.css">
+</head>
+<body>
+<header class="site-header"><div class="wrap">
+  <a class="brand" href="https://gpttrace.com/" target="_blank" rel="noopener"><span class="logo-mark" aria-hidden="true"></span><span class="brand-name">GPT<span class="brand-accent">Trace</span></span></a>
+  <span class="privacy-badge"><span class="dot"></span>Checked on this device</span>
+</div></header>
+<main class="wrap ext-main">
+  <aside class="result-card ext-source" data-role="source" hidden></aside>
+  <section class="result-card ext-result" data-role="result" aria-live="polite">
+    <div class="result-empty">
+      <h2>Check an image or text for AI</h2>
+      <ol class="steps">
+        <li>Right-click an image and choose <strong>Check image with GPTTrace</strong>.</li>
+        <li>Or select text, right-click it and choose <strong>Check text with GPTTrace</strong>.</li>
+      </ol>
+      <p class="note">The check runs here, on your device. The image or text is never uploaded; the only downloads are the detection models, once.</p>
+    </div>
+  </section>
+</main>
+<script type="module" src="result.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "gpttrace-desktop",
+  "private": true,
+  "description": "GPTTrace for macOS, Windows and Linux: the on-device detectors in a Tauri shell.",
+  "scripts": {
+    "web": "node ../../tools/build-app.js",
+    "dev": "npm run web && tauri dev",
+    "build": "npm run web && tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2"
+  }
+}
