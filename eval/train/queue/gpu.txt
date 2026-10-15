@@ -1,3 +1,2 @@
-after:2026-10-17 gpttrace-text-pairs kaggle kernels push -p eval/train/text/gen
+after:2026-10-17 gpttrace-text-v5-gpu PAIRS=1 GPU=1 sh eval/train/text/push_tpu.sh gpttrace-text-v5-gpu 0 jhu-clsp/ettin-encoder-150m 500000 5e-5 200000 100000 1
 after:2026-10-17 gpttrace-image-cfvit-ft2 sh eval/train/image/push.sh gpttrace-image-cfvit-ft2 0 2 1e-5
-after:2026-10-17 gpttrace-text-v4-gpu GPU=1 sh eval/train/text/push_tpu.sh gpttrace-text-v4-gpu 0 jhu-clsp/ettin-encoder-150m 500000 5e-5 200000 100000 1

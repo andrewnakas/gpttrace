@@ -1,1 +1,0 @@
-after:2026-10-18 gpttrace-text-v5-tpu PAIRS=1 JOBS="jhu-clsp/ettin-encoder-150m:v5-150m,jhu-clsp/ettin-encoder-400m:v5-400m:3e-5,jhu-clsp/ettin-encoder-68m:v5-68m" sh eval/train/text/push_tpu.sh gpttrace-text-v5-tpu 0 jhu-clsp/ettin-encoder-150m 500000 5e-5 200000 100000 1

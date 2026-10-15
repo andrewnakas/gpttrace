@@ -1,0 +1,8 @@
+# Arena scoring still to do (paused 2026-10-15 to save Colab units; the Speech DF Arena isn't taking submissions).
+# Before resuming: make arena_job.py upload each finished set to a private HF dataset (VMs got reclaimed and took results with them).
+arena2b sh eval/train/queue/colab_run.sh arena2b eval/bench/arena_job.py T4 GT_SETS=ASVspoof2019_LA,ASVspoof2021_LA
+arena5 sh eval/train/queue/colab_run.sh arena5 eval/bench/arena_job.py T4 GT_SETS=SONAR,LibriSeVoc,FakeOrReal,ADD22_T1,ADD22_T3
+arena7 sh eval/train/queue/colab_run.sh arena7 eval/bench/arena_job.py T4 GT_SETS=ADD23_R1,ADD23_R2
+arena6 sh eval/train/queue/colab_run.sh arena6 eval/bench/arena_job.py T4 GT_SETS=Codecfake
+arena3 sh eval/train/queue/colab_run.sh arena3 eval/bench/arena_job.py T4 GT_SETS=ASVspoof2021_DF
+arena4 sh eval/train/queue/colab_run.sh arena4 eval/bench/arena_job.py T4 GT_SETS=ASVspoof5

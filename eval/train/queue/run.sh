@@ -4,7 +4,9 @@
 # pushed one at a time per lane as the previous one finishes.
 #   nohup sh eval/train/queue/run.sh > ~/.cache/gpttrace/queue.log 2>&1 &
 # Queue files (one job per line, "<slug> <command…>", run from the repo root):
-#   eval/train/queue/tpu.txt   eval/train/queue/gpu.txt
+#   eval/train/queue/tpu.txt   eval/train/queue/gpu.txt   eval/train/queue/colab.txt
+# Colab lines run synchronously in the background (colab_job.sh); the lane
+# is busy while that process lives.
 # Finished lines move to eval/train/queue/done.txt with their final status.
 # A lane line may start with "after:YYYY-MM-DD" to hold it until that date
 # (e.g. the weekly GPU quota reset).
@@ -29,8 +31,19 @@ lane() { # lane file, state file
   if sh -c "$cmd"; then echo "$slug" > "$st"; tail -n +2 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   else echo "$(date '+%F %T') $1 push failed, retrying next round"; fi
 }
+colab_lane() {
+  f=$Q/colab.txt; pidf=$Q/.colab.pid
+  if [ -s "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null; then return; fi
+  if [ -s "$pidf" ]; then echo "$(date '+%F %T') colab job finished"; echo "$(date '+%F') colab $(cat $Q/.colab.name) done" >> $Q/done.txt; : > "$pidf"; fi
+  [ -s "$f" ] || return
+  line=$(head -n 1 "$f"); slug=${line%% *}; cmd=${line#* }
+  echo "$(date '+%F %T') colab start $slug: $cmd"
+  sh -c "$cmd" > "$HOME/.cache/gpttrace/colab-$slug.log" 2>&1 &
+  echo $! > "$pidf"; echo "$slug" > $Q/.colab.name
+  tail -n +2 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+}
 while true; do
-  lane tpu; lane gpu
-  [ -s $Q/tpu.txt ] || [ -s $Q/.tpu.current ] || [ -s $Q/gpu.txt ] || [ -s $Q/.gpu.current ] || { echo "$(date '+%F %T') queue empty"; exit 0; }
+  lane tpu; lane gpu; command -v colab >/dev/null && colab_lane
+  [ -s $Q/tpu.txt ] || [ -s $Q/.tpu.current ] || [ -s $Q/gpu.txt ] || [ -s $Q/.gpu.current ] || [ -s $Q/colab.txt ] || [ -s $Q/.colab.pid ] || { echo "$(date '+%F %T') queue empty"; exit 0; }
   sleep 600
 done

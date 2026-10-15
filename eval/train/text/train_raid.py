@@ -34,10 +34,13 @@ OUT = "/kaggle/working"
 TMR = "Oxidane/tmr-ai-text-detector"
 
 
+INPUT = os.environ.get("GT_INPUT", "/kaggle/input")    # Colab runs point this at /content
+
+
 def data_dir():
-    hits = glob.glob("/kaggle/input/**/raid_train.parquet", recursive=True)
+    hits = glob.glob(f"{INPUT}/**/raid_train.parquet", recursive=True)
     if not hits:
-        raise SystemExit("raid_train.parquet not found under /kaggle/input")
+        raise SystemExit(f"raid_train.parquet not found under {INPUT}")
     return os.path.dirname(hits[0])
 
 
@@ -104,7 +107,7 @@ def control(val):
 def load_pairs():
     """Topic-matched human/AI pairs from gen/gen_pairs.py, if mounted. 10% of
     topics (by source text) are held out for evaluation."""
-    hits = glob.glob("/kaggle/input/**/pairs.parquet", recursive=True)
+    hits = glob.glob(f"{INPUT}/**/pairs.parquet", recursive=True)
     if not hits:
         return None
     d = pd.read_parquet(hits[0])

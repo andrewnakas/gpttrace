@@ -13,7 +13,7 @@ import subprocess
 import pandas as pd
 
 BASE = "https://dataset.raid-bench.xyz/"
-OUT = "/kaggle/working"
+OUT = os.environ.get("GT_RAID_OUT", "/kaggle/working")
 COLS = ["id", "model", "decoding", "repetition_penalty", "attack", "domain", "title", "generation"]
 TRAIN_CAP = 150   # AI rows per cell for training (~4.2k cells)
 VAL_CAP = 12      # AI rows per cell for validation

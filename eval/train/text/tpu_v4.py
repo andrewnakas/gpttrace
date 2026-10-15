@@ -11,6 +11,7 @@
 # GT_DEVICE=cuda runs the same data, step order and evaluation on Kaggle's
 # 2xT4 instead (torchrun DDP, fp16): the fallback when the TPU queue stalls.
 import contextlib
+import shutil
 import hashlib
 import random as _random
 
@@ -202,21 +203,54 @@ def train_cuda():
     steps = np.load("/tmp/tok_steps.npy")
     if SMOKE:
         steps = steps[:60]
+    teacher = np.load("/tmp/teacher.npy") if os.path.exists("/tmp/teacher.npy") else None
     torch.manual_seed(0)
     model = AutoModelForSequenceClassification.from_pretrained(BASE_MODEL, num_labels=2).to(dev)
-    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank] if gpu else None)
+    big = sum(p.numel() for p in model.parameters()) > 300e6
+    if big:                                                   # 400M/1B: trade compute for memory
+        model.gradient_checkpointing_enable()
+    model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[rank] if gpu else None, find_unused_parameters=False)
     model.train()
     decay = [p for nme, p in model.named_parameters() if not any(k in nme for k in ("bias", "norm"))]
     rest = [p for nme, p in model.named_parameters() if any(k in nme for k in ("bias", "norm"))]
     opt = torch.optim.AdamW([{"params": decay, "weight_decay": 0.01}, {"params": rest, "weight_decay": 0.0}], lr=LR)
     total, warm = len(steps), max(1, int(0.05 * len(steps)))
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda st: st / warm if st < warm else 0.5 * (1 + np.cos(np.pi * (st - warm) / max(1, total - warm))))
-    scaler = torch.amp.GradScaler("cuda", enabled=gpu)
+    bf16 = gpu and torch.cuda.is_bf16_supported()             # A100/L4/H100: bf16, no loss scaling; T4: fp16 + scaler
+    scaler = torch.amp.GradScaler("cuda", enabled=gpu and not bf16)
     MICRO = 16
     if rank == 0:
-        print(f"DDP over {world} GPUs, {total} steps of {len(steps[0])}", flush=True)
+        print(f"DDP over {world} GPUs ({'bf16' if bf16 else 'fp16'}{', checkpointing' if big else ''}), {total} steps of {len(steps[0])}", flush=True)
+    # Checkpoints to a private HF repo (GT_CKPT_REPO; Colab runs) every
+    # CKPT_EVERY steps, so a reclaimed VM costs at most that much training.
+    # Resuming reloads the weights and skips finished steps; the optimiser
+    # state is not saved, so the LR re-warms over 100 steps.
+    ckpt_repo, start = os.environ.get("GT_CKPT_REPO"), 0
+    CKPT_EVERY = int(os.environ.get("GT_CKPT_EVERY", "1500"))
+    api, uploads = None, []
+    if ckpt_repo and os.environ.get("HF_TOKEN"):
+        from huggingface_hub import HfApi, hf_hub_download
+        api = HfApi(token=os.environ["HF_TOKEN"])
+        api.create_repo(ckpt_repo, private=True, exist_ok=True)
+        try:
+            ck = torch.load(hf_hub_download(ckpt_repo, "ckpt/ckpt.pt", token=os.environ["HF_TOKEN"]), map_location="cpu")
+            model.module.load_state_dict({k: v.float() for k, v in ck["model"].items()})
+            start = ck["step"] + 1
+            for _ in range(start):
+                sched.step()
+            if rank == 0:
+                print(f"resumed from {ckpt_repo} at step {start}", flush=True)
+        except Exception as e:
+            if rank == 0:
+                print("no checkpoint to resume:", type(e).__name__, flush=True)
+    rewarm = 100 if start else 0
     t0 = time.time()
     for st, rows in enumerate(steps):
+        if st < start:
+            continue
+        if rewarm and st - start < rewarm:
+            for g in opt.param_groups:
+                g["lr"] = sched.get_last_lr()[0] * (st - start + 1) / rewarm
         mine = rows[rank::world]
         chunks = [mine[i:i + MICRO] for i in range(0, len(mine), MICRO)]
         for ci, part in enumerate(chunks):
@@ -227,12 +261,25 @@ def train_cuda():
                 x[j, :len(seq)] = seq; m[j, :len(seq)] = 1
             ctx = model.no_sync() if ci < len(chunks) - 1 else contextlib.nullcontext()
             with ctx:                                           # all-reduce only on the last micro-batch
-                with torch.autocast("cuda", dtype=torch.float16) if gpu else contextlib.nullcontext():
-                    loss = model(input_ids=torch.from_numpy(x).to(dev), attention_mask=torch.from_numpy(m).to(dev), labels=torch.from_numpy(labels[part]).to(dev)).loss / len(chunks)
+                with torch.autocast("cuda", dtype=torch.bfloat16 if bf16 else torch.float16) if gpu else contextlib.nullcontext():
+                    out_ = model(input_ids=torch.from_numpy(x).to(dev), attention_mask=torch.from_numpy(m).to(dev), labels=torch.from_numpy(labels[part]).to(dev))
+                    loss = out_.loss
+                    if teacher is not None:                   # knowledge distillation (Hinton et al.), T = 2
+                        tt = torch.from_numpy(teacher[part].astype(np.float32)).to(dev)
+                        kd = torch.nn.functional.kl_div(torch.log_softmax(out_.logits.float() / 2, -1), torch.softmax(tt / 2, -1), reduction="batchmean") * 4
+                        loss = 0.5 * loss + 0.5 * kd
+                    loss = loss / len(chunks)
                 scaler.scale(loss).backward()
         scaler.unscale_(opt)
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(opt); scaler.update(); sched.step(); opt.zero_grad(set_to_none=True)
+        uploads = [u for u in uploads if u.is_alive()]
+        if api and rank == 0 and st and st % CKPT_EVERY == 0 and st < total - 1 and not uploads:   # skip while one is still uploading
+            import threading
+            torch.save({"step": st, "model": {k: v.detach().to("cpu", torch.bfloat16) for k, v in model.module.state_dict().items()}}, "/tmp/ckpt.pt")
+            th = threading.Thread(target=lambda: api.upload_file(path_or_fileobj="/tmp/ckpt.pt", path_in_repo="ckpt/ckpt.pt", repo_id=ckpt_repo, commit_message=f"checkpoint step {st}"))
+            th.start(); uploads.append(th)
+            print(f"checkpoint step {st} → {ckpt_repo}", flush=True)
         if rank == 0 and (st % 500 == 0 or st == total - 1):
             el = time.time() - t0
             print(f"step {st}/{total} loss {loss.item() * len(chunks):.4f} lr {sched.get_last_lr()[0]:.2e} {(st + 1) * len(rows) / max(el, 1e-9):.0f} rows/s", flush=True)
@@ -349,9 +396,12 @@ def _job(spec):
 
 
 def _env(base, tag, lr=None):
-    env = {**os.environ, "GT_BASE": base, "GT_OUTDIR": f"/kaggle/working/{tag}", "GT_STATE": f"/tmp/{tag}_state.pt"}
+    work = os.environ.get("GT_WORK", "/kaggle/working")
+    env = {**os.environ, "GT_BASE": base, "GT_OUTDIR": f"{work}/{tag}", "GT_STATE": f"/tmp/{tag}_state.pt"}
     if lr:
         env["GT_LR"] = lr
+    if os.environ.get("HF_TOKEN"):
+        env["GT_CKPT_REPO"] = f"nakas/gpttrace-{tag}"
     return env
 
 
@@ -363,6 +413,39 @@ def _install_xla():
     if ok.returncode:
         print("installing torch 2.8.0 + torch_xla 2.8.0", flush=True)
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch==2.8.0", "torch_xla[tpu]==2.8.0", "-f", "https://storage.googleapis.com/libtpu-releases/index.html"], check=True)
+
+
+@torch.no_grad()
+def teacher_logits(prep_repo):
+    """GT_STAGE=teacher: the trained teacher (GT_TEACHER_REPO, model/) scores
+    every training row; the [N, 2] logits go to the prep repo as
+    teacher_<tag>.npy for students to distil from (aligned with tok_*.npy)."""
+    from huggingface_hub import HfApi, snapshot_download
+    from transformers import AutoModelForSequenceClassification
+    repo, tok_ = os.environ["GT_TEACHER_REPO"], os.environ.get("HF_TOKEN")
+    d = snapshot_download(repo, allow_patterns=["model/*"], token=tok_)
+    model = AutoModelForSequenceClassification.from_pretrained(f"{d}/model", attn_implementation="eager").to("cuda").eval()
+    ids = np.load("/tmp/tok_ids.npy", mmap_mode="r"); offs = np.load("/tmp/tok_offs.npy")
+    n = len(offs) - 1
+    order = np.argsort(np.diff(offs))
+    out = np.zeros((n, 2), dtype=np.float32)
+    t0, bs = time.time(), 128
+    for i in range(0, n, bs):
+        idx = order[i:i + bs]
+        L = int(max(offs[r + 1] - offs[r] for r in idx))
+        x = np.zeros((len(idx), L), dtype=np.int64); m = np.zeros((len(idx), L), dtype=np.int64)
+        for j, r in enumerate(idx):
+            seq = ids[offs[r]:offs[r + 1]]
+            x[j, :len(seq)] = seq; m[j, :len(seq)] = 1
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            lg = model(input_ids=torch.from_numpy(x).cuda(), attention_mask=torch.from_numpy(m).cuda()).logits.float()
+        out[idx] = lg.cpu().numpy()
+        if (i // bs) % 500 == 0:
+            print(f"teacher {i}/{n} {(i + bs) / (time.time() - t0):.0f} rows/s", flush=True)
+    name = f"teacher_{repo.split('gpttrace-')[-1]}.npy"
+    np.save(f"/tmp/{name}", out.astype(np.float16))
+    HfApi(token=tok_).upload_file(path_or_fileobj=f"/tmp/{name}", path_in_repo=name, repo_id=prep_repo, repo_type="dataset", commit_message=f"teacher logits from {repo}")
+    print("teacher logits uploaded:", name, out.shape, flush=True)
 
 
 def main():
@@ -379,8 +462,43 @@ def main():
         print("xla check rc", chk.returncode, chk.stdout[-800:], chk.stderr[-1500:], flush=True)
         if chk.returncode:
             raise SystemExit("XLA check failed")
-    eh = tokenize_train()
-    eh.to_parquet("/tmp/extra_human.parquet")
+    # GT_STAGE=prep (cheap CPU machine): tokenise once and publish the arrays
+    # to a private HF dataset (GT_PREP_REPO). GT_STAGE=train (GPU machine):
+    # fetch them instead of rebuilding, so the GPU only bills for GPU work.
+    stage, prep_repo = os.environ.get("GT_STAGE", "all"), os.environ.get("GT_PREP_REPO")
+    if stage in ("train", "teacher") and prep_repo:
+        from huggingface_hub import snapshot_download
+        d = snapshot_download(prep_repo, repo_type="dataset", token=os.environ.get("HF_TOKEN"))
+        for f in ("tok_ids.npy", "tok_offs.npy", "tok_labels.npy", "tok_steps.npy", "extra_human.parquet"):
+            shutil.copy(f"{d}/{f}", f"/tmp/{f}")
+        os.makedirs(f"{INPUT}/raid", exist_ok=True)
+        shutil.copy(f"{d}/raid_val.parquet", f"{INPUT}/raid/raid_val.parquet")
+        shutil.copy(f"{d}/raid_val.parquet", f"{INPUT}/raid/raid_train.parquet")   # data_dir() looks for this name
+        teach = os.environ.get("GT_TEACHER")                  # distillation targets, e.g. teacher_v5-1b.npy
+        if teach and os.path.exists(f"{d}/{teach}"):
+            shutil.copy(f"{d}/{teach}", "/tmp/teacher.npy")
+            print("distilling from", teach, flush=True)
+        if os.path.exists(f"{d}/pairs.parquet"):              # for the pairs-holdout eval
+            os.makedirs(f"{INPUT}/pairs", exist_ok=True)
+            shutil.copy(f"{d}/pairs.parquet", f"{INPUT}/pairs/pairs.parquet")
+        print("prep data from", prep_repo, flush=True)
+    else:
+        eh = tokenize_train()
+        eh.to_parquet("/tmp/extra_human.parquet")
+    if stage == "teacher":
+        teacher_logits(prep_repo)
+        return
+    if stage == "prep":
+        from huggingface_hub import HfApi
+        api = HfApi(token=os.environ.get("HF_TOKEN"))
+        api.create_repo(prep_repo, repo_type="dataset", private=True, exist_ok=True)
+        os.makedirs("/tmp/prep", exist_ok=True)
+        for f in ("tok_ids.npy", "tok_offs.npy", "tok_labels.npy", "tok_steps.npy", "extra_human.parquet"):
+            shutil.copy(f"/tmp/{f}", f"/tmp/prep/{f}")
+        shutil.copy(f"{data_dir()}/raid_val.parquet", "/tmp/prep/raid_val.parquet")
+        api.upload_folder(repo_id=prep_repo, repo_type="dataset", folder_path="/tmp/prep", commit_message="tokenised training data")
+        print("prep uploaded to", prep_repo, flush=True)
+        return
     done = []
     for spec in JOBS:
         base, tag, lr = _job(spec)
@@ -432,6 +550,8 @@ def eval_job():
     metrics["pairs_holdout"] = pairs_eval(model, tok)
     print("pairs holdout", metrics["pairs_holdout"], flush=True)
     json.dump(metrics, open(f"{OUT}/metrics.json", "w"), indent=1)
+    if os.environ.get("GT_SKIP_EXPORT") == "1":              # teachers: weights only (ONNX >2 GB fails anyway)
+        return
     # ONNX export and int8 selection run on CPU, comparing against torch scores.
     model = model.to("cpu")
     metrics["export"] = export(val)

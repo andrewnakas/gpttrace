@@ -67,43 +67,56 @@ def human_rows():
             rows.append(("wikipedia", t, f"Write a Wikipedia-style encyclopedia introduction about \"{r.title}\"."))
         if sum(1 for x in rows if x[0] == "wikipedia") >= N_PER_SOURCE:
             break
-    # PMC open-access sections (CC BY): academic prose.
+    # PMC open-access sections (CC BY): academic prose. The commercial-use
+    # subset is stored as Arrow IPC streams, not parquet.
     n = 0
     try:
-        files = sorted(fs.glob("datasets/TomTBT/pmc_open_access_section/**/*.parquet"))
+        import pyarrow as pa
+        files = sorted(fs.glob("datasets/TomTBT/pmc_open_access_section/data/commercial/*.arrow"))
         rng.shuffle(files)
-        pf = pq.ParquetFile(fs.open(files[0]))
-        print("pmc columns", pf.schema_arrow.names, flush=True)
-        textcols = [c for c in pf.schema_arrow.names if c.lower() in ("introduction", "discussion", "abstract", "methods", "results", "conclusion")]
         for f in files[:8]:
-            pf = pq.ParquetFile(fs.open(f))
-            for g in range(pf.num_row_groups):
-                t = pf.read_row_group(g).to_pandas()
-                for r in t.to_dict("records"):
-                    for c in textcols:
+            with fs.open(f, "rb") as fh:
+                reader = pa.ipc.open_stream(fh)
+                names = reader.schema.names
+                textcols = [c for c in names if c.lower() in ("introduction", "discussion", "methods", "results", "conclusion")]
+                titlecol = next((c for c in names if c.lower() in ("title", "article_title")), None)
+                for batch in reader:
+                    for r in batch.to_pylist():
+                        c = rng.choice(textcols)
                         v = r.get(c)
-                        v = " ".join(v) if isinstance(v, (list, tuple)) else (v or "")
-                        v = " ".join(str(v).split()[:450])
+                        v = " ".join(v) if isinstance(v, (list, tuple)) else str(v or "")
+                        v = " ".join(v.split()[:450])
                         if words(v, 150, 600):
-                            title = r.get("title") or r.get("article_title") or "a biomedical study"
+                            title = (r.get(titlecol) if titlecol else None) or "a biomedical study"
                             rows.append(("pmc-" + c.lower(), v, f"Write the {c.lower()} section of a scientific paper titled \"{title}\"."))
                             n += 1
+                        if n >= N_PER_SOURCE:
                             break
                     if n >= N_PER_SOURCE:
                         break
-                if n >= N_PER_SOURCE:
-                    break
             if n >= N_PER_SOURCE:
                 break
     except Exception as e:
         print("pmc failed", repr(e)[:300], flush=True)
-    # arXiv abstracts (CC0 metadata).
-    for r in sample_parquet("datasets/gfissore/arxiv-abstracts-2021/**/*.parquet", "abstract", N_PER_SOURCE, extra="title"):
-        t = " ".join(str(r.abstract).split())
-        if words(t, 100, 400):
-            rows.append(("arxiv", t, f"Write the abstract of a research paper titled \"{' '.join(str(r.title).split())}\"."))
-        if sum(1 for x in rows if x[0] == "arxiv") >= N_PER_SOURCE:
-            break
+    print("pmc rows", n, flush=True)
+    # arXiv abstracts (CC0 metadata): one gzipped JSONL file, read as a stream.
+    n = 0
+    try:
+        import gzip, json
+        with fs.open("datasets/gfissore/arxiv-abstracts-2021/arxiv-abstracts.jsonl.gz", "rb") as raw, gzip.open(raw, "rt") as fh:
+            for line in fh:
+                if rng.random() > 0.02:
+                    continue
+                r = json.loads(line)
+                t = " ".join(str(r.get("abstract", "")).split())
+                if words(t, 100, 400):
+                    rows.append(("arxiv", t, f"Write the abstract of a research paper titled \"{' '.join(str(r.get('title', '')).split())}\"."))
+                    n += 1
+                    if n >= N_PER_SOURCE:
+                        break
+    except Exception as e:
+        print("arxiv failed", repr(e)[:300], flush=True)
+    print("arxiv rows", n, flush=True)
     # Gutenberg: a passage from the middle of a book; continue the story.
     try:
         for r in sample_parquet("datasets/manu/project_gutenberg/data/en-*.parquet", "text", N_PER_SOURCE // 6, max_files=3):
@@ -190,6 +203,7 @@ def paraphrase(ai):
 
 
 if __name__ == "__main__":
+    os.makedirs(OUT, exist_ok=True)
     human = human_rows()
     ai = generate(human)
     ai += paraphrase(ai)

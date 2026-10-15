@@ -1,1 +1,3 @@
 .*.current
+.colab.pid
+.colab.name

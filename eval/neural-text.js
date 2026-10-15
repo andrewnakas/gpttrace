@@ -24,7 +24,9 @@ export const TMR = { name: "tmr-q8", dir: path.join(HF, "onnx-community/tmr-ai-t
 export const ETTIN = { name: "ettin150-v2-q8", dir: path.join(HF, "gpttrace/ettin150-raid-v2/onnx"), file: "model_quantized.onnx", maxTokens: 512 };
 export const ETTIN3 = { ...ETTIN, name: "ettin150-v3-q8", dir: path.join(HF, "gpttrace/ettin150-raid-v3/onnx") };
 // NEURAL=tmr|ettin|ettin3 selects the model in eval/run.js --deep (default: shipped).
-export const SPECS = { tmr: TMR, ettin: ETTIN, ettin3: ETTIN3 };
+// 4-bit MatMul + 8-bit embeddings (eval/train/text/quant4.py, then Gather → int8): 109 MB vs 151 MB.
+export const ETTIN3Q4 = { ...ETTIN3, name: "ettin150-v3-q4e8", dir: path.join(os.homedir(), ".cache", "gpttrace", "q4", "q4"), file: "model_q4e8.onnx" };
+export const SPECS = { tmr: TMR, ettin: ETTIN, ettin3: ETTIN3, ettin3q4: ETTIN3Q4 };
 
 export async function loadModel(spec) {
   const ort = await import("../vendor/ort-1.30.0/ort.wasm.min.mjs");

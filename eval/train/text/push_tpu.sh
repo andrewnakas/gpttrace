@@ -4,13 +4,17 @@
 # e.g. push_tpu.sh gpttrace-text-v4-tpu 0 jhu-clsp/ettin-encoder-150m 500000 5e-5 200000 100000 1
 # JOBS="jhu-clsp/ettin-encoder-150m:v4-150m,jhu-clsp/ettin-encoder-400m:v4-400m" trains several
 # models in one session, one after another (outputs in /kaggle/working/<tag>/).
-# PAIRS=1 also mounts the gpttrace-text-pairs output (paraphrase/humanizer pairs) for training.
+# PAIRS=1 also mounts the paraphrase/humanizer pairs for training: the private dataset
+# andrewnakas/gpttrace-pairs (push_pairs_dataset.sh), or PAIRS=kernel for the
+# gpttrace-text-pairs kernel's output.
 # GPU=1 builds the same run for Kaggle's 2xT4 instead (GT_DEVICE=cuda), e.g.
 #   GPU=1 push_tpu.sh gpttrace-text-v4-gpu 0 jhu-clsp/ettin-encoder-150m 500000 5e-5 200000 100000 1
 set -e
 cd "$(dirname "$0")"
 SLUG=$1 SMOKE=$2 BASE=$3 ROWS=$4 LR=$5 MAGE=$6 HUMAN=$7 EPOCHS=$8
-EXTRA_SOURCES=""; [ -n "$PAIRS" ] && EXTRA_SOURCES=', "andrewnakas/gpttrace-text-pairs"'
+EXTRA_SOURCES=""; DATASETS=""
+[ "$PAIRS" = kernel ] && EXTRA_SOURCES=', "andrewnakas/gpttrace-text-pairs"'
+[ "$PAIRS" = 1 ] && DATASETS='"andrewnakas/gpttrace-pairs"'
 if [ -n "$GPU" ]; then DEVICE=cuda; ACCEL='"enable_gpu": true,
   "enable_tpu": false,'; SHAPE='"machine_shape": "NvidiaTeslaT4"'
 else DEVICE=tpu; ACCEL='"enable_gpu": false,
@@ -32,7 +36,7 @@ cat > "$D/kernel-metadata.json" <<JSON
   $ACCEL
   "enable_internet": true,
   "keywords": [],
-  "dataset_sources": [],
+  "dataset_sources": [$DATASETS],
   "kernel_sources": ["andrewnakas/gpttrace-raid-data"$EXTRA_SOURCES],
   "competition_sources": [],
   "model_sources": [],
